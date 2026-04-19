@@ -1,4 +1,4 @@
-name: medmod
+name: medmodv2
 channels:
 - conda-forge
 - defaults
