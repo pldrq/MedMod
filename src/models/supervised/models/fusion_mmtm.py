@@ -1,20 +1,19 @@
-
-import torch.nn as nn
-import torchvision
-import torch
 import numpy as np
-
-from torch.nn.functional import kl_div, softmax, log_softmax
-from .loss import RankingLoss, CosineLoss, KLDivLoss
+import torch
+import torch.nn as nn
 import torch.nn.functional as F
+import torchvision
 from torch import Tensor
-from torchvision.models.resnet import ResNet
+from torch.nn.functional import kl_div, log_softmax, softmax
+
+from .loss import CosineLoss, KLDivLoss
+
 
 class MMTM(nn.Module):
     def __init__(self, dim_visual, dim_ehr, ratio):
-        super(MMTM, self).__init__()
+        super().__init__()
         dim = dim_visual + dim_ehr
-        dim_out = int(2*dim/ratio)
+        dim_out = int(2 * dim / ratio)
         self.fc_squeeze = nn.Linear(dim, dim_out)
 
         self.fc_visual = nn.Linear(dim_out, dim_visual)
@@ -22,7 +21,6 @@ class MMTM(nn.Module):
         self.relu = nn.ReLU()
         self.sigmoid = nn.Sigmoid()
 
-        
     def forward(self, visual, skeleton):
         squeeze_array = []
         visual_view = visual.view(visual.shape[:2] + (-1,))
@@ -46,7 +44,7 @@ class MMTM(nn.Module):
         vis_out = vis_out.view(vis_out.shape + (1,) * dim_diff)
 
         dim_diff = len(skeleton.shape) - len(sk_out.shape)
-        sk_out = sk_out.view(sk_out.shape[0], 1 , sk_out.shape[1])
+        sk_out = sk_out.view(sk_out.shape[0], 1, sk_out.shape[1])
 
         return visual * vis_out, skeleton * sk_out
 
@@ -54,8 +52,8 @@ class MMTM(nn.Module):
 class FusionMMTM(nn.Module):
 
     def __init__(self, args, ehr_model, cxr_model):
-	
-        super(FusionMMTM, self).__init__()
+
+        super().__init__()
         self.args = args
         self.ehr_model = ehr_model
         self.cxr_model = cxr_model
@@ -72,8 +70,6 @@ class FusionMMTM(nn.Module):
             nn.Linear(feats_dim, self.args.num_classes),
         )
 
-        
-
         self.layer_after = args.layer_after
         self.projection = nn.Linear(self.ehr_model.feats_dim, self.cxr_model.feats_dim)
 
@@ -84,7 +80,7 @@ class FusionMMTM(nn.Module):
 
         ehr = torch.nn.utils.rnn.pack_padded_sequence(ehr, seq_lengths, batch_first=True, enforce_sorted=False)
 
-        ehr, (ht, _)= self.ehr_model.layer0(ehr)
+        ehr, (ht, _) = self.ehr_model.layer0(ehr)
         ehr_unpacked, _ = torch.nn.utils.rnn.pad_packed_sequence(ehr, batch_first=True)
 
         cxr_feats = self.cxr_model.vision_backbone.conv1(img)
@@ -115,31 +111,22 @@ class FusionMMTM(nn.Module):
         if self.layer_after == 4 or self.layer_after == -1:
             cxr_feats, ehr_unpacked = self.mmtm4(cxr_feats, ehr_unpacked)
 
-
-
-        
-
-
         cxr_feats = self.cxr_model.vision_backbone.avgpool(cxr_feats)
         cxr_feats = torch.flatten(cxr_feats, 1)
-
 
         cxr_preds = self.cxr_model.classifier(cxr_feats)
         cxr_preds_sig = torch.sigmoid(cxr_preds)
 
-
         ehr = torch.nn.utils.rnn.pack_padded_sequence(ehr_unpacked, seq_lengths, batch_first=True, enforce_sorted=False)
-        ehr, (ht, _)= self.ehr_model.layer1(ehr)
+        ehr, (ht, _) = self.ehr_model.layer1(ehr)
         ehr_feats = ht.squeeze()
-        
+
         ehr_feats = self.ehr_model.do(ehr_feats)
         ehr_preds = self.ehr_model.dense_layer(ehr_feats)
         ehr_preds_sig = torch.sigmoid(ehr_preds)
-        
-        late_average = (cxr_preds + ehr_preds)/2
-        late_average_sig = (cxr_preds_sig + ehr_preds_sig)/2
 
-
+        late_average = (cxr_preds + ehr_preds) / 2
+        late_average_sig = (cxr_preds_sig + ehr_preds_sig) / 2
 
         projected = self.projection(ehr_feats)
         loss = self.kl_loss(cxr_feats, projected)
@@ -149,22 +136,14 @@ class FusionMMTM(nn.Module):
 
         joint_preds_sig = torch.sigmoid(joint_preds)
 
-
-        
-       
-
         return {
-            'cxr_only': cxr_preds_sig,
-            'ehr_only': ehr_preds_sig,
-            'joint': joint_preds_sig,
-            'late_average': late_average_sig,
-            'align_loss': loss,
-
-            'cxr_only_scores': cxr_preds,
-            'ehr_only_scores': ehr_preds,
-            'late_average_scores': late_average,
-            'joint_scores': joint_preds,
-
-            }
-
-  
+            "cxr_only": cxr_preds_sig,
+            "ehr_only": ehr_preds_sig,
+            "joint": joint_preds_sig,
+            "late_average": late_average_sig,
+            "align_loss": loss,
+            "cxr_only_scores": cxr_preds,
+            "ehr_only_scores": ehr_preds,
+            "late_average_scores": late_average,
+            "joint_scores": joint_preds,
+        }

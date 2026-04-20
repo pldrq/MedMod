@@ -1,24 +1,29 @@
-from __future__ import absolute_import
-from __future__ import print_function
+import json
+import logging
+import os
+import pickle
+from typing import Any, Dict
 
 import numpy as np
-import platform
-import pickle
-import json
-import os
 
 
 class Discretizer:
-    def __init__(self, timestep=0.8, store_masks=True, impute_strategy='zero', start_time='zero',
-                 config_path= './ehr_utils/resources/discretizer_config.json'):
+    def __init__(
+        self,
+        timestep=0.8,
+        store_masks=True,
+        impute_strategy="zero",
+        start_time="zero",
+        config_path="src/data/resources/discretizer_config.json",
+    ):
 
         with open(config_path) as f:
             config = json.load(f)
-            self._id_to_channel = config['id_to_channel']
+            self._id_to_channel = config["id_to_channel"]
             self._channel_to_id = dict(zip(self._id_to_channel, range(len(self._id_to_channel))))
-            self._is_categorical_channel = config['is_categorical_channel']
-            self._possible_values = config['possible_values']
-            self._normal_values = config['normal_values']
+            self._is_categorical_channel = config["is_categorical_channel"]
+            self._possible_values = config["possible_values"]
+            self._normal_values = config["normal_values"]
 
         self._header = ["Hours"] + self._id_to_channel
         self._timestep = timestep
@@ -40,11 +45,11 @@ class Discretizer:
         N_channels = len(self._id_to_channel)
         ts = [float(row[0]) for row in X]
         for i in range(len(ts) - 1):
-            assert ts[i] < ts[i+1] + eps
+            assert ts[i] < ts[i + 1] + eps
 
-        if self._start_time == 'relative':
+        if self._start_time == "relative":
             first_time = ts[0]
-        elif self._start_time == 'zero':
+        elif self._start_time == "zero":
             first_time = 0
         else:
             raise ValueError("start_time is invalid")
@@ -110,10 +115,10 @@ class Discretizer:
 
         # impute missing values
 
-        if self._impute_strategy not in ['zero', 'normal_value', 'previous', 'next']:
+        if self._impute_strategy not in ["zero", "normal_value", "previous", "next"]:
             raise ValueError("impute strategy is invalid")
 
-        if self._impute_strategy in ['normal_value', 'previous']:
+        if self._impute_strategy in ["normal_value", "previous"]:
             prev_values = [[] for i in range(len(self._id_to_channel))]
             for bin_id in range(N_bins):
                 for channel in self._id_to_channel:
@@ -121,18 +126,18 @@ class Discretizer:
                     if mask[bin_id][channel_id] == 1:
                         prev_values[channel_id].append(original_value[bin_id][channel_id])
                         continue
-                    if self._impute_strategy == 'normal_value':
+                    if self._impute_strategy == "normal_value":
                         imputed_value = self._normal_values[channel]
-                    if self._impute_strategy == 'previous':
+                    if self._impute_strategy == "previous":
                         if len(prev_values[channel_id]) == 0:
                             imputed_value = self._normal_values[channel]
                         else:
                             imputed_value = prev_values[channel_id][-1]
                     write(data, bin_id, channel, imputed_value, begin_pos)
 
-        if self._impute_strategy == 'next':
+        if self._impute_strategy == "next":
             prev_values = [[] for i in range(len(self._id_to_channel))]
-            for bin_id in range(N_bins-1, -1, -1):
+            for bin_id in range(N_bins - 1, -1, -1):
                 for channel in self._id_to_channel:
                     channel_id = self._channel_to_id[channel]
                     if mask[bin_id][channel_id] == 1:
@@ -173,9 +178,9 @@ class Discretizer:
 
     def print_statistics(self):
         print("statistics of discretizer:")
-        print("\tconverted {} examples".format(self._done_count))
-        print("\taverage unused data = {:.2f} percent".format(100.0 * self._unused_data_sum / self._done_count))
-        print("\taverage empty  bins = {:.2f} percent".format(100.0 * self._empty_bins_sum / self._done_count))
+        print(f"\tconverted {self._done_count} examples")
+        print(f"\taverage unused data = {100.0 * self._unused_data_sum / self._done_count:.2f} percent")
+        print(f"\taverage empty  bins = {100.0 * self._empty_bins_sum / self._done_count:.2f} percent")
 
 
 class Normalizer:
@@ -205,21 +210,47 @@ class Normalizer:
         with open(save_file_path, "wb") as save_file:
             N = self._count
             self._means = 1.0 / N * self._sum_x
-            self._stds = np.sqrt(1.0/(N - 1) * (self._sum_sq_x - 2.0 * self._sum_x * self._means + N * self._means**2))
+            self._stds = np.sqrt(
+                1.0 / (N - 1) * (self._sum_sq_x - 2.0 * self._sum_x * self._means + N * self._means**2),
+            )
             self._stds[self._stds < eps] = eps
-            pickle.dump(obj={'means': self._means,
-                             'stds': self._stds},
-                        file=save_file,
-                        protocol=2)
+            pickle.dump(
+                obj={
+                    "means": self._means,
+                    "stds": self._stds,
+                },
+                file=save_file,
+                protocol=2,
+            )
 
-    def load_params(self, load_file_path):
-        with open(load_file_path, "rb") as load_file:
-            if platform.python_version()[0] == '2':
-                dct = pickle.load(load_file)
-            else:
-                dct = pickle.load(load_file, encoding='latin1')
-            self._means = dct['means']
-            self._stds = dct['stds']
+    def load_params(self, load_file_path: str) -> None:
+        """Loads preprocessing parameters from a JSON file.
+
+        Args:
+            load_file_path: Path to the JSON configuration file.
+
+        Raises:
+            FileNotFoundError: If the specified file does not exist.
+            json.JSONDecodeError: If the file is not valid JSON.
+            KeyError: If the 'means' or 'stds' keys are missing from the JSON.
+        """
+        try:
+            with open(load_file_path, encoding="utf-8") as load_file:
+                dct: dict[str, Any] = json.load(load_file)
+
+            # Accessing these keys will naturally raise a KeyError if they are missing
+            self._means = dct["means"]
+            self._stds = dct["stds"]
+
+        except FileNotFoundError:
+            logging.error("Parameter file not found at: %s", load_file_path)
+            raise
+        except json.JSONDecodeError as exc:
+            logging.error("Failed to decode JSON from %s: %s", load_file_path, exc)
+            raise
+        except KeyError as exc:
+            logging.error("Missing required key in parameter file: %s", exc)
+            raise
 
     def transform(self, X):
         if self._fields is None:
@@ -231,40 +262,44 @@ class Normalizer:
             ret[:, col] = (X[:, col] - self._means[col]) / self._stds[col]
         return ret
 
+
 # data preprocessor
 def read_timeseries(args):
-    path = f'{args.ehr_data_root}/{args.task}/train/14991576_episode3_timeseries.csv'
+    path = f"{args.ehr_data_root}/{args.task}/train/14991576_episode3_timeseries.csv"
     ret = []
-    with open(path, "r") as tsfile:
-        header = tsfile.readline().strip().split(',')
+    with open(path) as tsfile:
+        header = tsfile.readline().strip().split(",")
         assert header[0] == "Hours"
         for line in tsfile:
-            mas = line.strip().split(',')
+            mas = line.strip().split(",")
             ret.append(np.array(mas))
     return np.stack(ret)
-    
-# ADDED: function to initialize normalizer and discretizer 
+
+
+# ADDED: function to initialize normalizer and discretizer
 def ehr_funcs(args):
-    discretizer = Discretizer(timestep=float(args.timestep),
-                          store_masks=True,
-                          impute_strategy='previous',
-                          start_time='zero',
-                          config_path=f'MedMod/src/data/resources/discretizer_config.json')
-    discretizer_header = discretizer.transform(read_timeseries(args))[1].split(',')
+    discretizer = Discretizer(
+        timestep=float(args.timestep),
+        store_masks=True,
+        impute_strategy="previous",
+        start_time="zero",
+        config_path=f"src/data/resources/discretizer_config.json",
+    )
+    discretizer_header = discretizer.transform(read_timeseries(args))[1].split(",")
     cont_channels = [i for (i, x) in enumerate(discretizer_header) if x.find("->") == -1]
 
     normalizer = Normalizer(fields=cont_channels)  # choose here which columns to standardize
     normalizer_state = args.normalizer_state
     if normalizer_state is None:
-        if args.task is 'mortality':
-            normalizer_state = 'ihm_ts{}.input_str:previous.start_time:zero.normalizer'.format(args.timestep)
-        elif args.task is 'decompensation':
-            normalizer_state = 'decomp_ts{}.input_str:previous.n1e5.start_time:zero.normalizer'.format(args.timestep)
-        elif args.task is 'length-of-stay':
-            normalizer_state = 'los_ts{}.input_str:previous.start_time:zero.n5e4.normalizer'.format(args.timestep)
+        if args.task == "mortality":
+            normalizer_state = f"ihm_ts{args.timestep}.input_str:previous.start_time:zero.json"
+        elif args.task == "decompensation":
+            normalizer_state = f"decomp_ts{args.timestep}.input_str:previous.n1e5.start_time:zero.json"
+        elif args.task == "length-of-stay":
+            normalizer_state = f"los_ts{args.timestep}.input_str:previous.start_time:zero.n5e4.json"
         else:
-            normalizer_state = 'ph_ts{}.input_str:previous.start_time:zero.normalizer'.format(args.timestep)
-        normalizer_state = os.path.join('/MedMod/src/data/resources', normalizer_state)
+            normalizer_state = f"ph_ts{args.timestep}.input_str:previous.start_time:zero.json"
+        normalizer_state = os.path.join("src/data/normalizers", normalizer_state)
     normalizer.load_params(normalizer_state)
-    
+
     return discretizer, normalizer
