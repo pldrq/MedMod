@@ -1,20 +1,21 @@
+from collections import OrderedDict
 
-import torch.nn as nn
-import torchvision
-import torch
 import numpy as np
-
-from torch.nn.functional import kl_div, softmax, log_softmax
-from .loss import RankingLoss, CosineLoss
+import torch
+import torch.nn as nn
 import torch.nn.functional as F
+import torchvision
 from torch import Tensor
-from torchvision.models.resnet import ResNet
+from torch.nn.functional import kl_div, log_softmax, softmax
+
+from .loss import CosineLoss
+
 
 class FusionDAFT(nn.Module):
 
     def __init__(self, args, ehr_model, cxr_model):
-	
-        super(FusionDAFT, self).__init__()
+
+        super().__init__()
         self.args = args
         self.ehr_model = ehr_model
         self.cxr_model = cxr_model
@@ -31,16 +32,46 @@ class FusionDAFT(nn.Module):
         bottleneck_dim_3 = int(((4 * 4) + 256) / 7.0)
         bottleneck_dim_4 = int(((4 * 4) + 512) / 7.0)
 
-        self.daft_layer_0 = DAFTBlock(in_channels=256, ndim_non_img = 64, bottleneck_dim = bottleneck_dim_0, location = 0, activation = args.daft_activation)
-        self.daft_layer_1 = DAFTBlock(in_channels=256, ndim_non_img = 64, bottleneck_dim = bottleneck_dim_1, location = 0, activation = args.daft_activation)
-        self.daft_layer_2 = DAFTBlock(in_channels=256, ndim_non_img = 128, bottleneck_dim = bottleneck_dim_2, location = 0, activation = args.daft_activation)
-        self.daft_layer_3 = DAFTBlock(in_channels=256, ndim_non_img = 256, bottleneck_dim = bottleneck_dim_3, location = 0, activation = args.daft_activation)
-        self.daft_layer_4 = DAFTBlock(in_channels=256, ndim_non_img = 512, bottleneck_dim = bottleneck_dim_4, location = 0, activation = args.daft_activation)
-        
+        self.daft_layer_0 = DAFTBlock(
+            in_channels=256,
+            ndim_non_img=64,
+            bottleneck_dim=bottleneck_dim_0,
+            location=0,
+            activation=args.daft_activation,
+        )
+        self.daft_layer_1 = DAFTBlock(
+            in_channels=256,
+            ndim_non_img=64,
+            bottleneck_dim=bottleneck_dim_1,
+            location=0,
+            activation=args.daft_activation,
+        )
+        self.daft_layer_2 = DAFTBlock(
+            in_channels=256,
+            ndim_non_img=128,
+            bottleneck_dim=bottleneck_dim_2,
+            location=0,
+            activation=args.daft_activation,
+        )
+        self.daft_layer_3 = DAFTBlock(
+            in_channels=256,
+            ndim_non_img=256,
+            bottleneck_dim=bottleneck_dim_3,
+            location=0,
+            activation=args.daft_activation,
+        )
+        self.daft_layer_4 = DAFTBlock(
+            in_channels=256,
+            ndim_non_img=512,
+            bottleneck_dim=bottleneck_dim_4,
+            location=0,
+            activation=args.daft_activation,
+        )
+
     def forward(self, ehr, seq_lengths=None, img=None, n_crops=0, bs=16):
         ehr = torch.nn.utils.rnn.pack_padded_sequence(ehr, seq_lengths, batch_first=True, enforce_sorted=False)
 
-        ehr, (ht, _)= self.ehr_model.layer0(ehr)
+        ehr, (ht, _) = self.ehr_model.layer0(ehr)
         ehr_unpacked, _ = torch.nn.utils.rnn.pad_packed_sequence(ehr, batch_first=True)
 
         # resnet
@@ -51,7 +82,6 @@ class FusionDAFT(nn.Module):
         cxr_feats = self.cxr_model.vision_backbone.maxpool(cxr_feats)
         if self.layer_after == 0 or self.layer_after == -1:
             ehr_unpacked = self.daft_layer_0(cxr_feats, ehr_unpacked)
-
 
         cxr_feats = self.cxr_model.vision_backbone.layer1(cxr_feats)
         if self.layer_after == 1 or self.layer_after == -1:
@@ -71,24 +101,19 @@ class FusionDAFT(nn.Module):
         cxr_feats = torch.flatten(cxr_feats, 1)
 
         ehr = torch.nn.utils.rnn.pack_padded_sequence(ehr_unpacked, seq_lengths, batch_first=True, enforce_sorted=False)
-        ehr, (ht, _)= self.ehr_model.layer1(ehr)
+        ehr, (ht, _) = self.ehr_model.layer1(ehr)
         ehr_feats = ht.squeeze()
         # cxr_preds = self.cxr_model.classifier(cxr_feats)
-
 
         out = self.ehr_model.do(ehr_feats)
         out = self.ehr_model.dense_layer(out)
         ehr_preds = torch.sigmoid(out)
 
-        
-       
-
         return {
-            'daft_fusion': ehr_preds,
-            'daft_fusion_scores': out
-            }
-from abc import ABCMeta, abstractmethod
-from collections import OrderedDict
+            "daft_fusion": ehr_preds,
+            "daft_fusion_scores": out,
+        }
+
 
 class DAFTBlock(nn.Module):
     def __init__(
@@ -101,7 +126,7 @@ class DAFTBlock(nn.Module):
         shift: bool = True,
         bottleneck_dim: int = 7,
     ) -> None:
-        super(DAFTBlock, self).__init__()
+        super().__init__()
         self.scale_activation = None
         if activation == "sigmoid":
             self.scale_activation = nn.Sigmoid()
@@ -113,7 +138,7 @@ class DAFTBlock(nn.Module):
         self.location = location
         self.film_dims = in_channels
         self.global_pool = nn.AdaptiveAvgPool2d(1)
-    
+
         self.bottleneck_dim = bottleneck_dim
         aux_input_dims = self.film_dims
         # shift and scale decoding
@@ -137,9 +162,10 @@ class DAFTBlock(nn.Module):
             ("aux_out", nn.Linear(self.bottleneck_dim, self.film_dims, bias=False)),
         ]
         self.aux = nn.Sequential(OrderedDict(layers))
+
     def forward(self, feature_map, x_aux):
         ehr_avg = torch.mean(x_aux, dim=1)
-        
+
         squeeze = self.global_pool(feature_map)
         squeeze = squeeze.view(squeeze.size(0), -1)
         squeeze = torch.cat((squeeze, ehr_avg), dim=1)
@@ -163,7 +189,7 @@ class DAFTBlock(nn.Module):
             v_shift = v_shift.view(v_shift.size()[0], 1, v_shift.size()[1]).expand_as(x_aux)
         else:
             raise AssertionError(
-                f"Sanity checking on scale and shift failed. Must be of type bool or None: {self.scale}, {self.shift}"
+                f"Sanity checking on scale and shift failed. Must be of type bool or None: {self.scale}, {self.shift}",
             )
 
         return (v_scale * x_aux) + v_shift
