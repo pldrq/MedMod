@@ -49,11 +49,7 @@ def process_partition(args, definitions, code_to_group, id_to_group, group_to_id
                     print("\n\t(no events in ICU) ", patient, ts_filename)
                     continue
 
-                output_ts_filename = patient + "_" + ts_filename
-                with open(os.path.join(output_dir, output_ts_filename), "w") as outfile:
-                    outfile.write(header)
-                    for line in ts_lines:
-                        outfile.write(line)
+                relative_path = os.path.join(patient, ts_filename)
 
                 cur_labels = [0 for i in range(len(id_to_group))]
 
@@ -74,7 +70,7 @@ def process_partition(args, definitions, code_to_group, id_to_group, group_to_id
                 cur_labels = [x for (i, x) in enumerate(cur_labels)
                               if definitions[id_to_group[i]]['use_in_benchmark']]
 
-                xty_triples.append((output_ts_filename, los, icustay, cur_labels))
+                xty_triples.append((relative_path, 0.0, los, los, icustay, cur_labels))
     
 
     print("Number of created samples:", len(xty_triples))
@@ -86,12 +82,12 @@ def process_partition(args, definitions, code_to_group, id_to_group, group_to_id
     codes_in_benchmark = [x for x in id_to_group
                           if definitions[x]['use_in_benchmark']]
 
-    listfile_header = "stay,period_length,stay_id," + ",".join(codes_in_benchmark)
+    listfile_header = "stay,lower,upper,period_length,stay_id," + ",".join(codes_in_benchmark)
     with open(os.path.join(output_dir, "listfile.csv"), "w") as listfile:
         listfile.write(listfile_header + "\n")
-        for (x, t, stay_id, y) in xty_triples:
+        for (x, lower, upper, period_length, stay_id, y) in xty_triples:
             labels = ','.join(map(str, y))
-            listfile.write('{},{:.6f},{},{}\n'.format(x, t, stay_id, labels))
+            listfile.write('{},{:.6f},{:.6f},{:.6f},{},{}\n'.format(x, lower, upper, period_length, stay_id, labels))
 
 
 def main():
@@ -102,6 +98,7 @@ def main():
                         default=os.path.join(os.path.dirname(__file__), '../resources/icd_9_10_definitions_2.yaml'),
                         help='YAML file with phenotype definitions.')
     args, _ = parser.parse_known_args()
+    print(args.phenotype_definitions)
 
     with open(args.phenotype_definitions) as definitions_file:
         definitions = yaml.load(definitions_file)

@@ -52,13 +52,8 @@ def process_partition(args, partition, eps=1e-6, n_hours=48):
                     print("\n\t(no events in ICU) ", patient, ts_filename)
                     continue
 
-                output_ts_filename = patient + "_" + ts_filename
-                with open(os.path.join(output_dir, output_ts_filename), "w") as outfile:
-                    outfile.write(header)
-                    for line in ts_lines:
-                        outfile.write(line)
-
-                xy_pairs.append((output_ts_filename, icustay, mortality))
+                relative_path = os.path.join(patient, ts_filename)
+                xy_pairs.append((relative_path, 0.0, float(n_hours), float(n_hours), icustay, mortality))
 
     print("Number of created samples:", len(xy_pairs))
     if partition == "train":
@@ -67,9 +62,9 @@ def process_partition(args, partition, eps=1e-6, n_hours=48):
         xy_pairs = sorted(xy_pairs)
 
     with open(os.path.join(output_dir, "listfile.csv"), "w") as listfile:
-        listfile.write('stay,period_length,stay_id,y_true\n')
-        for (x, icustay, y) in xy_pairs:
-            listfile.write('{},0,{},{:d}\n'.format(x, icustay, y))
+        listfile.write('stay,lower,upper,period_length,stay_id,y_true\n')
+        for (x, lower, upper, period_length, icustay, y) in xy_pairs:
+            listfile.write('{},{:.6f},{:.6f},{:.6f},{},{:d}\n'.format(x, lower, upper, period_length, icustay, y))
 
 
 def main():

@@ -77,18 +77,14 @@ def process_partition(args, partition, sample_rate=1.0, shortest_length=4.0,
                 # At least one measurement
                 sample_times = list(filter(lambda x: x > event_times[0], sample_times))
 
-                output_ts_filename = patient + "_" + ts_filename
-                with open(os.path.join(output_dir, output_ts_filename), "w") as outfile:
-                    outfile.write(header)
-                    for line in ts_lines:
-                        outfile.write(line)
+                relative_path = os.path.join(patient, ts_filename)
 
                 for t in sample_times:
                     if mortality == 0:
                         cur_mortality = 0
                     else:
                         cur_mortality = int(lived_time - t < future_time_interval)
-                    xty_triples.append((output_ts_filename, t, icustay, cur_mortality))
+                    xty_triples.append((relative_path, 0.0, t, t, icustay, cur_mortality))
 
     print("Number of created samples:", len(xty_triples))
     if partition == "train":
@@ -97,9 +93,9 @@ def process_partition(args, partition, sample_rate=1.0, shortest_length=4.0,
         xty_triples = sorted(xty_triples)
 
     with open(os.path.join(output_dir, "listfile.csv"), "w") as listfile:
-        listfile.write('stay,period_length,stay_id,y_true\n')
-        for (x, t, icustay, y) in xty_triples:
-            listfile.write('{},{:.6f},{},{:d}\n'.format(x, t, icustay, y))
+        listfile.write('stay,lower,upper,period_length,stay_id,y_true\n')
+        for (x, lower, upper, period_length, icustay, y) in xty_triples:
+            listfile.write('{},{:.6f},{:.6f},{:.6f},{},{:d}\n'.format(x, lower, upper, period_length, icustay, y))
 
 
 def main():
