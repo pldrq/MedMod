@@ -14,10 +14,6 @@ from tqdm import tqdm
 def process_partition(args, partition, sample_rate=1.0, shortest_length=4.0,
                       eps=1e-6, future_time_interval=24.0):
 
-    output_dir = os.path.join(args.output_path, partition)
-    if not os.path.exists(output_dir):
-        os.mkdir(output_dir)
-
     xty_triples = []
     patients = list(filter(str.isdigit, os.listdir(os.path.join(args.root_path, partition))))
     for patient in tqdm(patients, desc='Iterating over patients in {}'.format(partition)):
@@ -92,7 +88,7 @@ def process_partition(args, partition, sample_rate=1.0, shortest_length=4.0,
     if partition == "test":
         xty_triples = sorted(xty_triples)
 
-    with open(os.path.join(output_dir, "listfile.csv"), "w") as listfile:
+    with open(os.path.join(args.output_path, output_filename), "w") as listfile:
         listfile.write('stay,lower,upper,period_length,stay_id,y_true\n')
         for (x, lower, upper, period_length, icustay, y) in xty_triples:
             listfile.write('{},{:.6f},{:.6f},{:.6f},{},{:d}\n'.format(x, lower, upper, period_length, icustay, y))
@@ -107,9 +103,10 @@ def main():
     if not os.path.exists(args.output_path):
         os.makedirs(args.output_path)
 
-    process_partition(args, "test")
-    process_partition(args, "train")
-
+    # Write combined train+val listfile (to be split by split_train_val.py)
+    process_partition(args, "train", output_filename="trainval_listfile.csv")
+    # Write final test listfile directly
+    process_partition(args, "test",  output_filename="test_listfile.csv")
 
 if __name__ == '__main__':
     main()
