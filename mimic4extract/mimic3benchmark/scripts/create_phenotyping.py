@@ -101,7 +101,7 @@ def main():
     print(args.phenotype_definitions)
 
     with open(args.phenotype_definitions) as definitions_file:
-        definitions = yaml.load(definitions_file)
+        definitions = yaml.safe_load(definitions_file)
 
     code_to_group = {}
 
