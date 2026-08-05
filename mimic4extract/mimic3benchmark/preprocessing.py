@@ -145,6 +145,11 @@ def read_itemid_to_variable_map(fn, variable_column='LEVEL2'):
     var_map.COUNT = var_map.COUNT.astype(int)
     var_map = var_map[(var_map[variable_column] != '') & (var_map.COUNT > 0)]
     var_map = var_map[(var_map.STATUS == 'ready')]
+    # Drop labevents itemids drawn from a different body fluid than blood (e.g. urine pH/glucose
+    # sharing a LEVEL2 variable with arterial/serum pH/glucose -- itemids 51491/51094/50831 for pH,
+    # 51478 for Glucose). FLUID is only populated for labevents rows; chartevents rows (already
+    # blood-source by construction, e.g. ABG/VBG channels) have an empty FLUID and are left alone.
+    var_map = var_map[(var_map.FLUID == '') | (var_map.FLUID == 'BLOOD')]
     var_map.ITEMID = var_map.ITEMID.astype(int)
     var_map = var_map[[variable_column, 'ITEMID', 'MIMIC LABEL']]
     # .set_index('ITEMID')
@@ -181,7 +186,9 @@ def remove_outliers_for_variable(events, variable, ranges):
     if variable not in ranges.index:
         return events
     idx = (events.variable == variable)
-    v = events.value[idx].copy()
+    # Not every variable has a clean_fn casting value to float first (see clean_fns above), so
+    # coerce here too -- any stray non-numeric string (e.g. "ERROR") becomes NaN, same as clean_lab.
+    v = pd.to_numeric(events.value[idx], errors='coerce')
     v.loc[v < ranges.OUTLIER_LOW[variable]] = np.nan
     v.loc[v > ranges.OUTLIER_HIGH[variable]] = np.nan
     v.loc[v < ranges.VALID_LOW[variable]] = ranges.VALID_LOW[variable]

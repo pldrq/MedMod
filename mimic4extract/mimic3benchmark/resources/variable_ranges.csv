@@ -25,7 +25,7 @@ Glascow coma scale motor response,,1,1,6,6,6
 Glascow coma scale total,,3,3,11,15,15
 Glascow coma scale verbal response,,1,1,4,5,5
 Glucose,,0,33,128,2000,2200
-Heart rate,,0,0,86,350,390
+Heart Rate,,0,0,86,350,390
 Height,,0,0,170,240,275
 Hematocrit,,0,0,30.2,75,100
 Hemoglobin,,0,0,10.2,25,30

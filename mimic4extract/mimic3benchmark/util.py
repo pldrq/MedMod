@@ -26,6 +26,3 @@ def get_data_stats(data_root, dataset='mimic-iii'):
     print(f'train  0s {count_class(train, 0)}  1s {count_class(train, 1)}')
     print(f'val  0s {count_class(val, 0)}  1s {count_class(val, 1)}')
     print(f'test  0s {count_class(test, 0)}  1s {count_class(test, 1)}')
-
-get_data_stats('data/decompensation', dataset='mimic-iii')
-get_data_stats('dataiv/decompensation', dataset='mimic-iv')

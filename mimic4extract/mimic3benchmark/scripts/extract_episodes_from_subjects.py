@@ -11,6 +11,7 @@ from mimic3benchmark.subject import read_stays, read_diagnoses, read_events, get
 from mimic3benchmark.subject import convert_events_to_timeseries, get_first_valid_from_timeseries
 from mimic3benchmark.preprocessing import read_itemid_to_variable_map, map_itemids_to_variables, clean_events
 from mimic3benchmark.preprocessing import assemble_episodic_data
+from mimic3benchmark.preprocessing import read_variable_ranges, remove_outliers_for_variable
 
 
 parser = argparse.ArgumentParser(description='Extract episodes from per-subject data.')
@@ -25,6 +26,7 @@ args, _ = parser.parse_known_args()
 
 var_map = read_itemid_to_variable_map(args.variable_map_file)
 variables = var_map.variable.unique()
+variable_ranges = read_variable_ranges(args.reference_range_file)
 
 for subject_dir in tqdm(os.listdir(args.subjects_root_path), desc='Iterating over subjects'):
     dn = os.path.join(args.subjects_root_path, subject_dir)
@@ -53,6 +55,10 @@ for subject_dir in tqdm(os.listdir(args.subjects_root_path), desc='Iterating ove
     events = map_itemids_to_variables(events, var_map)
 
     events = clean_events(events)
+
+    for variable in variable_ranges.index:
+        events = remove_outliers_for_variable(events, variable, variable_ranges)
+    events = events.loc[events.value.notnull()]
 
     if events.shape[0] == 0:
         # no valid events for this subject
