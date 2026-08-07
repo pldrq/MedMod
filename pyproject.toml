@@ -57,7 +57,6 @@ pre-commit = "^4.0.0"
 pytest = "^7.4.3"
 pytest-cov = "^5.0.0"
 commitizen = "^4.0.0"
-cz-bitbucket-jira-conventional = {git = "ssh://git@git.fraunhofer.pt/is2020/mlops-commit-drafter.git", rev = "v1.0.4"}
 safety = "^3.0.0"
 google-cloud-bigquery = "^3.41.0"
 
