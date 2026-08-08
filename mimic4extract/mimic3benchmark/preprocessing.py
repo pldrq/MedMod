@@ -328,6 +328,11 @@ clean_fns = {
 
 def clean_events(events):
     global clean_fns
+    # `value` can be read back from events.csv as an Arrow-backed string dtype on newer
+    # pandas/pyarrow stacks; every clean_fn below returns a numeric Series, and assigning
+    # numeric values into a strict string-typed column raises. Force plain object dtype first.
+    events = events.copy()
+    events['value'] = events['value'].astype(object)
     for var_name, clean_fn in clean_fns.items():
         idx = (events.variable == var_name)
         try:
