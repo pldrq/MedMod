@@ -328,11 +328,17 @@ clean_fns = {
 
 def clean_events(events):
     global clean_fns
-    # `value` can be read back from events.csv as an Arrow-backed string dtype on newer
-    # pandas/pyarrow stacks; every clean_fn below returns a numeric Series, and assigning
-    # numeric values into a strict string-typed column raises. Force plain object dtype first.
+    # value/valuenum/mimic_label can be read back from events.csv as an Arrow-backed string
+    # dtype on newer pandas/pyarrow stacks. Two failure modes follow: (1) clean_fns return
+    # numeric Series, and assigning those into a strict string-typed `value` column raises;
+    # (2) `.apply(lambda s: ...)` on an empty Arrow-backed string Series (e.g. a subject with
+    # zero rows for a given variable) doesn't reliably infer a bool result, so the subsequent
+    # `|`/`&` between two "string"-dtype results raises ArrowNotImplementedError instead of
+    # combining booleans. Force plain object dtype on all three columns first.
     events = events.copy()
-    events['value'] = events['value'].astype(object)
+    for col in ('value', 'valuenum', 'mimic_label'):
+        if col in events.columns:
+            events[col] = events[col].astype(object)
     for var_name, clean_fn in clean_fns.items():
         idx = (events.variable == var_name)
         try:
