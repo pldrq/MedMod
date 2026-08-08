@@ -214,14 +214,14 @@ def remove_outliers_for_variable(events, variable, ranges):
 def clean_sbp(df):
     v = df.value.astype(str).copy()
     idx = v.apply(lambda s: '/' in s)
-    v.loc[idx] = v[idx].apply(lambda s: re.match('^(\d+)/(\d+)$', s).group(1))
+    v.loc[idx] = v[idx].apply(lambda s: re.match(r'^(\d+)/(\d+)$', s).group(1))
     return v.astype(float)
 
 
 def clean_dbp(df):
     v = df.value.astype(str).copy()
     idx = v.apply(lambda s: '/' in s)
-    v.loc[idx] = v[idx].apply(lambda s: re.match('^(\d+)/(\d+)$', s).group(2))
+    v.loc[idx] = v[idx].apply(lambda s: re.match(r'^(\d+)/(\d+)$', s).group(2))
     return v.astype(float)
 
 
@@ -272,7 +272,7 @@ def clean_fio2(df):
 # GLUCOSE, PH: sometimes have ERROR as value
 def clean_lab(df):
     v = df.value.copy()
-    idx = v.apply(lambda s: type(s) is str and not re.match('^(\d+(\.\d*)?|\.\d+)$', s))
+    idx = v.apply(lambda s: type(s) is str and not re.match(r'^(\d+(\.\d*)?|\.\d+)$', s))
     v.loc[idx] = np.nan
     return v.astype(float)
 
@@ -281,7 +281,7 @@ def clean_lab(df):
 def clean_o2sat(df):
     # change "ERROR" to NaN
     v = df.value.copy()
-    idx = v.apply(lambda s: type(s) is str and not re.match('^(\d+(\.\d*)?|\.\d+)$', s))
+    idx = v.apply(lambda s: type(s) is str and not re.match(r'^(\d+(\.\d*)?|\.\d+)$', s))
     v.loc[idx] = np.nan
 
     v = v.astype(float)
