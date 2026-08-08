@@ -244,7 +244,12 @@ def clean_fio2(df):
     ''' The two following lines implement the code that was used to create the benchmark dataset that the paper used.
     This works with both python 2 and python 3.
     '''
-    is_str = np.array(map(lambda x: type(x) == str, list(df.value)), dtype=np.bool)
+    # NOTE: passing a bare `map(...)` object (instead of a list/array) to np.array() does not
+    # iterate it -- it wraps the map object as a single element and casts its (always-True)
+    # truthiness, silently collapsing is_str to a scalar True for every row. That makes `idx`
+    # below always equal `not torr` regardless of magnitude, dividing already-correct 0-1
+    # fraction FiO2 readings by 100 too. Build the array eagerly with a list comprehension.
+    is_str = np.array([type(x) == str for x in df.value], dtype=bool)
     idx = df.valuenum.fillna('').apply(lambda s: 'torr' not in s.lower()) & (is_str | (~is_str & (v > 1.0)))
 
     v.loc[idx] = v[idx] / 100.
