@@ -102,9 +102,19 @@ def extract_diagnosis_labels(diagnoses):
     diagnoses['value'] = 1
     labels = diagnoses[['stay_id', 'icd_code', 'value']].drop_duplicates()\
                       .pivot(index='stay_id', columns='icd_code', values='value').fillna(0).astype(int)
-    for l in diagnosis_labels:
-        if l not in labels:
-            labels[l] = 0
+    # Insert all missing columns in one shot instead of one at a time (labels[l] = 0 in a loop):
+    # a stay typically has only a handful of its ~256 diagnosis_labels present in the local
+    # pivot, so the loop was inserting ~250 columns individually, once per subject -- the
+    # "DataFrame is highly fragmented" PerformanceWarning was a real cost (repeated internal
+    # reallocation), not just noise. diagnosis_labels itself contains a few duplicate codes;
+    # the original loop tolerated that because `if l not in labels` becomes true only on a
+    # code's first occurrence -- dict.fromkeys() reproduces that same dedup, order-preserved.
+    missing_labels = list(dict.fromkeys(l for l in diagnosis_labels if l not in labels.columns))
+    if missing_labels:
+        columns_name = labels.columns.name
+        missing = pd.DataFrame(0, index=labels.index, columns=missing_labels, dtype=int)
+        labels = pd.concat([labels, missing], axis=1)
+        labels.columns.name = columns_name  # pd.concat drops it since `missing`'s columns are unnamed
     labels = labels[diagnosis_labels]
     return labels.rename(dict(zip(diagnosis_labels, ['Diagnosis ' + d for d in diagnosis_labels])), axis=1)
 
