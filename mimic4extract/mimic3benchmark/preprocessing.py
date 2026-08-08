@@ -97,6 +97,9 @@ diagnosis_labels = ['I169', 'I509', 'I2510', 'I4891', 'E119', 'N179', 'E785', 'J
 'E8782', '30500', '78791', '78551', 'E8889', '78820', '34590', '2800', '99859', 'V667', 'E8497',
 '79092', '5723', '3485', '5601', '25040', '570', '71590', '2869', '2763', '5770', 'V5865', '99662',
 '28860', '36201', '56210']
+# I2510 and A419 were listed twice; dedupe so extract_diagnosis_labels doesn't emit duplicate
+# "Diagnosis <code>" columns in episode{#}.csv for them.
+diagnosis_labels = list(dict.fromkeys(diagnosis_labels))
 def extract_diagnosis_labels(diagnoses):
     global diagnosis_labels
     diagnoses['value'] = 1
