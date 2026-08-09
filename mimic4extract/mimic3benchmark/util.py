@@ -9,19 +9,41 @@ def dataframe_from_csv(path, header=0, index_col=0):
     return pd.read_csv(path, header=header, index_col=index_col)
 
 
+def _load_patient_flag_set(resource_filename):
+    resource_path = os.path.join(os.path.dirname(__file__), 'resources', resource_filename)
+    patients = set()
+    with open(resource_path, 'r') as flag_file:
+        for line in flag_file:
+            x, y = line.strip().split(',')
+            if int(y) == 1:
+                patients.add(x)
+    return patients
+
+
+def get_test_patients():
+    """ Subject IDs held out into the test partition. Resolved against `resources/testset_iv.csv`. """
+    return _load_patient_flag_set('testset_iv.csv')
+
+
 def get_val_patients():
     """ Subject IDs held out from the training partition to form the validation set.
 
     Same split is shared by all tasks, resolved against `resources/valset_iv.csv`.
     """
-    resource_path = os.path.join(os.path.dirname(__file__), 'resources', 'valset_iv.csv')
-    val_patients = set()
-    with open(resource_path, 'r') as valset_file:
-        for line in valset_file:
-            x, y = line.strip().split(',')
-            if int(y) == 1:
-                val_patients.add(x)
-    return val_patients
+    return _load_patient_flag_set('valset_iv.csv')
+
+
+def get_subject_split(subject_id, test_patients, val_patients):
+    """ Resolve a single subject_id to "test", "validate" or "train", using the same fixed,
+    subject-level split (test_patients/val_patients) every other MedMod-produced split derives from.
+    Precedence matches split_train_and_test.py -> create_<task>.py: test, then validation, then train.
+    """
+    subject_id = str(subject_id)
+    if subject_id in test_patients:
+        return 'test'
+    if subject_id in val_patients:
+        return 'validate'
+    return 'train'
 
 
 def _patient_id_from_listfile_line(line):

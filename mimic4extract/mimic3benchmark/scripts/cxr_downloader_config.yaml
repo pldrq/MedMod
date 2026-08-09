@@ -1,0 +1,21 @@
+# Configuration Settings for cxr_downloader.py
+# csv_file_path should be the output of create_cxr_ehr_pair.py -- by convention that's saved directly under
+# cxr_data_root as mimic-cxr-ehr-split.csv (see mimic4extract/README.md step 6).
+csv_file_path: 'data/cxr/mimic-cxr-ehr-split.csv'
+output_directory: 'data/cxr'
+
+gcp:
+  bucket_name: 'mimic-cxr-jpg-2.1.0.physionet.org'
+  bucket_prefix: 'files'
+
+failed_csv_path: 'failed_downloads.csv'
+trial_run_limit: null
+max_workers: 10
+
+image:
+  resize:
+    enabled: false
+    size: 1024
+  crop:
+    enabled: false
+    size: 224

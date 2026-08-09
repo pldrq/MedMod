@@ -36,8 +36,46 @@ We do not provide the MIMIC-IV data itself. You must acquire the data yourself f
 5. The next command splits the whole dataset into training and testing sets. Note that the train/test split is the same of all tasks. 
 
        python -m mimic3benchmark.scripts.split_train_and_test data/root/
-	
-6. The following commands will generate task-specific datasets, which can later be used in models. These commands are independent, if you are going to work only on one benchmark task, you can run only the corresponding command. Each command also carves the training partition into train/validation using the same fixed patient split for every task (`mimic3benchmark/resources/valset_iv.csv`), so there is no separate train/validation split step to run afterwards.
+
+6. (Optional, needed for the `paired`/radiology workflow) Pair ICU stays with CXR studies, entirely locally --
+   joins your own `all_stays` table (from step 2) against `mimic-cxr-2.0.0-metadata.csv` (the same file
+   msc_climber's dataloader already reads from `cxr_data_root`), filtering to AP-view images taken within a
+   24h buffer of each stay's hospital admission (to catch ED X-rays taken shortly before ICU admission). Each
+   row is also stamped with a `split` column (`train`/`validate`/`test`), resolved from the same fixed,
+   subject-level split every other MedMod listfile uses (`resources/testset_iv.csv`, `resources/valset_iv.csv`)
+   -- so a CXR can never land in a different split than its paired ICU stay. Write the output directly to
+   `cxr_data_root`, since that's where msc_climber's dataloader expects to find it:
+
+       python -m mimic3benchmark.scripts.create_cxr_ehr_pair data/ /path/to/cxr_data_root/ /path/to/cxr_data_root/mimic-cxr-ehr-split.csv
+
+   No BigQuery project/billing needed -- this only requires `mimic-cxr-2.0.0-metadata.csv` locally, which is a
+   small (~227k row) file, not the full MIMIC-CXR-JPG image set. It also doesn't depend on any task listfiles
+   having been generated yet (unlike the old two-step BigQuery + listfile-lookup approach), so it can run any
+   time after step 2.
+
+   `mimic-cxr-ehr-split.csv` is read by msc_climber's `get_base_cxr_icustays()` instead of that function
+   re-deriving the same subject/CXR-timestamp join from raw files on every `DataModule.setup()` call.
+
+   Separately, if you're using CXR labels (any task other than a pure EHR-only baseline), attach CheXpert
+   labels to every CXR study -- independent of ICU-stay pairing, since a study either has a chexpert.csv row
+   or it doesn't:
+
+       python -m mimic3benchmark.scripts.create_cxr_labels /path/to/cxr_data_root/ /path/to/cxr_data_root/mimic-cxr-2.0.0-metadata-with-chexpert.csv
+
+   This is read by msc_climber's `load_cxr_metadata_with_labels()` instead of that function re-parsing
+   `mimic-cxr-2.0.0-chexpert.csv` and re-joining on every call.
+
+7. (Optional) If you only need stays that have a paired CXR study (e.g. `data_pairs=paired` in msc_climber), this
+   command copies just those subjects/episodes into a new, smaller root, dropping any of a subject's other,
+   unpaired ICU stays and (if the subject has no paired stay at all) the subject entirely. Pass `--drop_events` to
+   also skip `events.csv` (raw, unbinned chart events), which is unused by any `create_<task>.py` script once
+   episodes have already been extracted.
+
+       python -m mimic3benchmark.scripts.filter_paired_stays data/root/ data/root_paired/ /path/to/cxr_data_root/mimic-cxr-ehr-split.csv
+
+   If you run this step, use `data/root_paired/` as the `root_path` in step 8 instead of `data/root/`.
+
+8. The following commands will generate task-specific datasets, which can later be used in models. These commands are independent, if you are going to work only on one benchmark task, you can run only the corresponding command. Each command also carves the training partition into train/validation using the same fixed patient split for every task (`mimic3benchmark/resources/valset_iv.csv`), so there is no separate train/validation split step to run afterwards.
 
        python -m mimic3benchmark.scripts.create_in_hospital_mortality data/root/ data/in-hospital-mortality/
        python -m mimic3benchmark.scripts.create_decompensation data/root/ data/decompensation/
@@ -49,6 +87,16 @@ its EHR-side stay windowing (full ICU stay) with phenotyping, so both are produc
 `data/root/` rather than a separate script. Its listfiles carry a single placeholder label column — real radiology
 labels are CheXpert labels resolved downstream (in msc_climber, from the CXR side) via a stay/study join, not from
 this listfile. Omit the flag to only produce `data/phenotyping/`.
+
+9. (Optional, needs step 6) If you already have the full MIMIC-CXR-JPG image set locally, you're done after step
+   6 -- just point `cxr_data_root` at it.
+   `mimic3benchmark/scripts/cxr_downloader.py` exists for the case where you *don't*: it downloads only the CXR
+   jpgs listed in the pair CSV (i.e. only images actually paired with an ICU stay) from the public `mimic-cxr-jpg`
+   GCS bucket, with optional resize/crop applied on the way down -- avoiding pulling the full ~500GB dataset when
+   you only need the paired subset. It's configured via `mimic3benchmark/scripts/cxr_downloader_config.yaml`
+   (input CSV, output directory, GCS bucket, worker count, resize/crop) rather than CLI flags:
+
+       python -m mimic3benchmark.scripts.cxr_downloader
 
 After the above commands are done, there will be a directory `data/{task}` for each created benchmark task, containing
 `train_listfile.csv`, `val_listfile.csv` and `test_listfile.csv` directly (no intermediate `train`/`test`
