@@ -148,7 +148,8 @@ def break_up_stays_by_subject(stays, output_path, subjects=None):
             pass
 
         stays[stays.subject_id == subject_id].sort_values(by='intime').to_csv(os.path.join(dn, 'stays.csv'),
-                                                                              index=False)
+                                                                              index=False,
+                                                                              date_format='%Y-%m-%d %H:%M:%S')
 
 
 def break_up_diagnoses_by_subject(diagnoses, output_path, subjects=None):
