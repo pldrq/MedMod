@@ -37,26 +37,25 @@ We do not provide the MIMIC-IV data itself. You must acquire the data yourself f
 
        python -m mimic3benchmark.scripts.split_train_and_test data/root/
 	
-6. The following commands will generate task-specific datasets, which can later be used in models. These commands are independent, if you are going to work only on one benchmark task, you can run only the corresponding command.
+6. The following commands will generate task-specific datasets, which can later be used in models. These commands are independent, if you are going to work only on one benchmark task, you can run only the corresponding command. Each command also carves the training partition into train/validation using the same fixed patient split for every task (`mimic3benchmark/resources/valset_iv.csv`), so there is no separate train/validation split step to run afterwards.
 
        python -m mimic3benchmark.scripts.create_in_hospital_mortality data/root/ data/in-hospital-mortality/
        python -m mimic3benchmark.scripts.create_decompensation data/root/ data/decompensation/
        python -m mimic3benchmark.scripts.create_length_of_stay data/root/ data/length-of-stay/
-       python -m mimic3benchmark.scripts.create_phenotyping data/root/ data/phenotyping/
+       python -m mimic3benchmark.scripts.create_phenotyping data/root/ data/phenotyping/ --radiology_output_path data/radiology/
 
-After the above commands are done, there will be a directory `data/{task}` for each created benchmark task.
-These directories have two sub-directories: `train` and `test`.
-Each of them contains bunch of ICU stays and one file with name `listfile.csv`, which lists all samples in that particular set.
-Each row of `listfile.csv` has the following form: `icu_stay, period_length, label(s)`.
+The `--radiology_output_path` flag on `create_phenotyping` also writes `data/radiology/`: the radiology task shares
+its EHR-side stay windowing (full ICU stay) with phenotyping, so both are produced from the same pass over
+`data/root/` rather than a separate script. Its listfiles carry a single placeholder label column — real radiology
+labels are CheXpert labels resolved downstream (in msc_climber, from the CXR side) via a stay/study join, not from
+this listfile. Omit the flag to only produce `data/phenotyping/`.
+
+After the above commands are done, there will be a directory `data/{task}` for each created benchmark task, containing
+`train_listfile.csv`, `val_listfile.csv` and `test_listfile.csv` directly (no intermediate `train`/`test`
+sub-directories with a nested `listfile.csv`, except where the task itself needs to store truncated per-stay
+timeseries, e.g. `create_readmission`/`create_multitask`, which still populate `train`/`test` sub-directories with
+those copies).
+Each row of a listfile has the following form: `icu_stay, period_length, label(s)`.
 A row specifies a sample for which the input is the collection of ICU event of `icu_stay` that occurred in the first `period_length` hours of the stay and the target is/are `label(s)`.
 In in-hospital mortality prediction task `period_length` is always 48 hours, so it is not listed in corresponding listfiles.
-
-
-### Train / validation split
-
-Use the following command to extract validation set from the training set. This step is required for running the baseline models. Likewise the train/test split, the train/validation split is the same for all tasks.
-
-       python -m mimic3models.split_train_val {dataset-directory}
-       
-`{dataset-directory}` can be either `data/in-hospital-mortality`, `data/phenotyping`, `data/decompensation`, `data/length-of-stay`, or `data/radiology`.
 

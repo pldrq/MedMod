@@ -9,13 +9,11 @@ import random
 random.seed(49297)
 from tqdm import tqdm
 
+from mimic3benchmark.util import get_val_patients, split_train_val_lines, write_listfiles
+
 
 def process_partition(args, definitions, code_to_group, id_to_group, group_to_id,
                       partition, eps=1e-6):
-    output_dir = os.path.join(args.output_path, partition)
-    if not os.path.exists(output_dir):
-        os.mkdir(output_dir)
-
     xty_triples = []
     patients = list(filter(str.isdigit, os.listdir(os.path.join(args.root_path, partition))))
     for patient in tqdm(patients, desc='Iterating over patients in {}'.format(partition)):
@@ -71,23 +69,36 @@ def process_partition(args, definitions, code_to_group, id_to_group, group_to_id
                               if definitions[id_to_group[i]]['use_in_benchmark']]
 
                 xty_triples.append((relative_path, 0.0, los, los, icustay, cur_labels))
-    
+
 
     print("Number of created samples:", len(xty_triples))
     if partition == "train":
         random.shuffle(xty_triples)
-    if partition == "train":
+    if partition == "test":
         xty_triples = sorted(xty_triples)
 
-    codes_in_benchmark = [x for x in id_to_group
-                          if definitions[x]['use_in_benchmark']]
+    return xty_triples
 
-    listfile_header = "stay,lower,upper,period_length,stay_id," + ",".join(codes_in_benchmark)
-    with open(os.path.join(output_dir, "listfile.csv"), "w") as listfile:
-        listfile.write(listfile_header + "\n")
-        for (x, lower, upper, period_length, stay_id, y) in xty_triples:
-            labels = ','.join(map(str, y))
-            listfile.write('{},{:.6f},{:.6f},{:.6f},{},{}\n'.format(x, lower, upper, period_length, stay_id, labels))
+
+def format_phenotyping_lines(xty_triples):
+    """ Format stay windows with the real per-stay ICD phenotype label vector. """
+    lines = []
+    for (x, lower, upper, period_length, stay_id, y) in xty_triples:
+        labels = ','.join(map(str, y))
+        lines.append('{},{:.6f},{:.6f},{:.6f},{},{}\n'.format(x, lower, upper, period_length, stay_id, labels))
+    return lines
+
+
+def format_radiology_lines(xty_triples):
+    """ Format the same stay windows with a placeholder label column.
+
+    The radiology task shares its EHR-side stay windowing (full ICU stay) with phenotyping, but its
+    real labels are CheXpert labels resolved downstream (msc_climber) from the CXR side via a
+    stay/study join, not from this listfile. A single placeholder column is enough to keep the
+    listfile schema valid (readers index into the label columns and don't accept an empty list).
+    """
+    return ['{},{:.6f},{:.6f},{:.6f},{},0\n'.format(x, lower, upper, period_length, stay_id)
+            for (x, lower, upper, period_length, stay_id, y) in xty_triples]
 
 
 def main():
@@ -97,6 +108,10 @@ def main():
     parser.add_argument('--phenotype_definitions', '-p', type=str,
                         default=os.path.join(os.path.dirname(__file__), '../resources/icd_9_10_definitions_2.yaml'),
                         help='YAML file with phenotype definitions.')
+    parser.add_argument('--radiology_output_path', type=str, default=None,
+                        help="If set, also write the same per-stay EHR windows (full ICU stay, placeholder "
+                             "label column) to this directory for the radiology task. Real radiology labels "
+                             "are resolved downstream from CheXpert data, not from this listfile.")
     args, _ = parser.parse_known_args()
     print(args.phenotype_definitions)
 
@@ -124,8 +139,27 @@ def main():
     if not os.path.exists(args.output_path):
         os.makedirs(args.output_path)
 
-    process_partition(args, definitions, code_to_group, id_to_group, group_to_id, "test")
-    process_partition(args, definitions, code_to_group, id_to_group, group_to_id, "train")
+    test_triples = process_partition(args, definitions, code_to_group, id_to_group, group_to_id, "test")
+    trainval_triples = process_partition(args, definitions, code_to_group, id_to_group, group_to_id, "train")
+
+    val_patients = get_val_patients()
+
+    codes_in_benchmark = [x for x in id_to_group if definitions[x]['use_in_benchmark']]
+    pheno_header = "stay,lower,upper,period_length,stay_id," + ",".join(codes_in_benchmark) + "\n"
+    pheno_train_lines, pheno_val_lines = split_train_val_lines(
+        format_phenotyping_lines(trainval_triples), val_patients)
+    write_listfiles(args.output_path, pheno_header, pheno_train_lines, pheno_val_lines,
+                    format_phenotyping_lines(test_triples))
+
+    if args.radiology_output_path:
+        if not os.path.exists(args.radiology_output_path):
+            os.makedirs(args.radiology_output_path)
+
+        radiology_header = "stay,lower,upper,period_length,stay_id,placeholder\n"
+        radiology_train_lines, radiology_val_lines = split_train_val_lines(
+            format_radiology_lines(trainval_triples), val_patients)
+        write_listfiles(args.radiology_output_path, radiology_header, radiology_train_lines, radiology_val_lines,
+                        format_radiology_lines(test_triples))
 
 
 if __name__ == '__main__':

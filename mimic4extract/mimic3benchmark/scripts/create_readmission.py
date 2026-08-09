@@ -9,6 +9,10 @@ random.seed(49297)
 from tqdm import tqdm
 from datetime import datetime, timedelta
 
+from mimic3benchmark.util import get_val_patients, split_train_val_lines, write_listfiles
+
+LISTFILE_HEADER = 'stay,period_length,stay_id,y_true\n'
+
 
 def process_partition(args, partition, eps=1e-6, time_limit = 30):
     output_dir = os.path.join(args.output_path, partition)
@@ -92,10 +96,7 @@ def process_partition(args, partition, eps=1e-6, time_limit = 30):
     if partition == "test":
         xy_pairs = sorted(xy_pairs)
 
-    with open(os.path.join(output_dir, "listfile.csv"), "w") as listfile:
-        listfile.write('stay,period_length,stay_id,y_true\n')
-        for (x, t, icustay, y) in xy_pairs:
-            listfile.write('{},0,{},{:d}\n'.format(x, icustay, y))
+    return ['{},0,{},{:d}\n'.format(x, icustay, y) for (x, t, icustay, y) in xy_pairs]
 
 
 def main():
@@ -107,8 +108,11 @@ def main():
     if not os.path.exists(args.output_path):
         os.makedirs(args.output_path)
 
-    process_partition(args, "test")
-    process_partition(args, "train")
+    test_lines = process_partition(args, "test")
+    trainval_lines = process_partition(args, "train")
+
+    train_lines, val_lines = split_train_val_lines(trainval_lines, get_val_patients())
+    write_listfiles(args.output_path, LISTFILE_HEADER, train_lines, val_lines, test_lines)
 
 
 if __name__ == '__main__':

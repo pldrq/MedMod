@@ -8,12 +8,12 @@ import random
 random.seed(49297)
 from tqdm import tqdm
 
+from mimic3benchmark.util import get_val_patients, split_train_val_lines, write_listfiles
+
+LISTFILE_HEADER = 'stay,lower,upper,period_length,stay_id,y_true\n'
+
 
 def process_partition(args, partition, eps=1e-6, n_hours=48):
-    output_dir = os.path.join(args.output_path, partition)
-    if not os.path.exists(output_dir):
-        os.mkdir(output_dir)
-
     xy_pairs = []
     patients = list(filter(str.isdigit, os.listdir(os.path.join(args.root_path, partition))))
     for patient in tqdm(patients, desc='Iterating over patients in {}'.format(partition)):
@@ -61,10 +61,8 @@ def process_partition(args, partition, eps=1e-6, n_hours=48):
     if partition == "test":
         xy_pairs = sorted(xy_pairs)
 
-    with open(os.path.join(output_dir, "listfile.csv"), "w") as listfile:
-        listfile.write('stay,lower,upper,period_length,stay_id,y_true\n')
-        for (x, lower, upper, period_length, icustay, y) in xy_pairs:
-            listfile.write('{},{:.6f},{:.6f},{:.6f},{},{:d}\n'.format(x, lower, upper, period_length, icustay, y))
+    return ['{},{:.6f},{:.6f},{:.6f},{},{:d}\n'.format(x, lower, upper, period_length, icustay, y)
+            for (x, lower, upper, period_length, icustay, y) in xy_pairs]
 
 
 def main():
@@ -76,8 +74,11 @@ def main():
     if not os.path.exists(args.output_path):
         os.makedirs(args.output_path)
 
-    process_partition(args, "test")
-    process_partition(args, "train")
+    test_lines = process_partition(args, "test")
+    trainval_lines = process_partition(args, "train")
+
+    train_lines, val_lines = split_train_val_lines(trainval_lines, get_val_patients())
+    write_listfiles(args.output_path, LISTFILE_HEADER, train_lines, val_lines, test_lines)
 
 
 if __name__ == '__main__':

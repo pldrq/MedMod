@@ -11,6 +11,12 @@ import random
 random.seed(49297)
 from tqdm import tqdm
 
+from mimic3benchmark.util import get_val_patients, split_train_val_lines, write_listfiles
+
+LISTFILE_HEADER = ','.join(['filename', 'length of stay', 'in-hospital mortality task (pos;mask;label)',
+                            'length of stay task (masks;labels)', 'phenotyping task (labels)',
+                            'decompensation task (masks;labels)']) + "\n"
+
 
 def process_partition(args, definitions, code_to_group, id_to_group, group_to_id,
                       partition, sample_rate=1.0, shortest_length=4,
@@ -171,29 +177,26 @@ def process_partition(args, definitions, code_to_group, id_to_group, group_to_id
     decomp_masks = permute(decomp_masks, perm)
     decomp_labels = permute(decomp_labels, perm)
 
-    with open(os.path.join(output_dir, "listfile.csv"), "w") as listfile:
-        header = ','.join(['filename', 'length of stay', 'in-hospital mortality task (pos;mask;label)',
-                           'length of stay task (masks;labels)', 'phenotyping task (labels)',
-                           'decompensation task (masks;labels)'])
-        listfile.write(header + "\n")
+    lines = []
+    for index in range(len(file_names)):
+        file_name = file_names[index]
+        los = '{:.6f}'.format(loses[index])
 
-        for index in range(len(file_names)):
-            file_name = file_names[index]
-            los = '{:.6f}'.format(loses[index])
+        ihm_task = '{:d};{:d};{:d}'.format(ihm_positions[index], ihm_masks[index], ihm_labels[index])
 
-            ihm_task = '{:d};{:d};{:d}'.format(ihm_positions[index], ihm_masks[index], ihm_labels[index])
+        ls1 = ";".join(map(str, los_masks[index]))
+        ls2 = ";".join(map(lambda x: '{:.6f}'.format(x), los_labels[index]))
+        los_task = '{};{}'.format(ls1, ls2)
 
-            ls1 = ";".join(map(str, los_masks[index]))
-            ls2 = ";".join(map(lambda x: '{:.6f}'.format(x), los_labels[index]))
-            los_task = '{};{}'.format(ls1, ls2)
+        pheno_task = ';'.join(map(str, phenotype_labels[index]))
 
-            pheno_task = ';'.join(map(str, phenotype_labels[index]))
+        dec1 = ";".join(map(str, decomp_masks[index]))
+        dec2 = ";".join(map(str, decomp_labels[index]))
+        decomp_task = '{};{}'.format(dec1, dec2)
 
-            dec1 = ";".join(map(str, decomp_masks[index]))
-            dec2 = ";".join(map(str, decomp_labels[index]))
-            decomp_task = '{};{}'.format(dec1, dec2)
+        lines.append(','.join([file_name, los, ihm_task, los_task, pheno_task, decomp_task]) + "\n")
 
-            listfile.write(','.join([file_name, los, ihm_task, los_task, pheno_task, decomp_task]) + "\n")
+    return lines
 
 
 def main():
@@ -223,8 +226,11 @@ def main():
     if not os.path.exists(args.output_path):
         os.makedirs(args.output_path)
 
-    process_partition(args, definitions, code_to_group, id_to_group, group_to_id, "test")
-    process_partition(args, definitions, code_to_group, id_to_group, group_to_id, "train")
+    test_lines = process_partition(args, definitions, code_to_group, id_to_group, group_to_id, "test")
+    trainval_lines = process_partition(args, definitions, code_to_group, id_to_group, group_to_id, "train")
+
+    train_lines, val_lines = split_train_val_lines(trainval_lines, get_val_patients())
+    write_listfiles(args.output_path, LISTFILE_HEADER, train_lines, val_lines, test_lines)
 
 
 if __name__ == '__main__':
